@@ -1,0 +1,9 @@
+*.pyc
+*.zip
+*.jpg
+*.pth
+*.log
+*.npy
+*.DS_Store
+main.ipynb
+wandb/
