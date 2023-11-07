@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 def get_dataloader(config):
 
     if config['dataset'] == 'imdb':
-        dataset = load_dataset("imdb")
+        dataset = load_dataset("coqa")
         train_dataset = dataset["train"]
         test_dataset = dataset["test"]
 
