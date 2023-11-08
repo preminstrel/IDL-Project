@@ -10,11 +10,50 @@ def setup_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
+def train(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer):
+    if config['dataset'] == 'twitter_complaints':
+        train_loss, val_loss, train_ppl, eval_ppl= train_twitter(model, optimizer, train_dataloader, eval_dataloader, device, tokenizer)
+    elif config['dataset'] == 'imdb':
+        train_loss, val_loss, train_ppl, eval_ppl= train_imdb(model, optimizer, train_dataloader, eval_dataloader, device, tokenizer)
 
-def train(model, optimizer, train_dataloader, test_dataloader, device):
+    return train_loss, val_loss, train_ppl, eval_ppl
+
+def train_twitter(model, optimizer, train_dataloader, eval_dataloader, device, tokenizer):
+    model.train()
+    total_loss = 0
+    for step, batch in enumerate(tqdm(train_dataloader)):
+        batch = {k: v.to(device) for k, v in batch.items()}
+        outputs = model(**batch)
+        loss = outputs.loss
+        total_loss += loss.detach().float()
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+    model.eval()
+    eval_loss = 0
+    eval_preds = []
+    for step, batch in enumerate(tqdm(eval_dataloader)):
+        batch = {k: v.to(device) for k, v in batch.items()}
+        with torch.no_grad():
+            outputs = model(**batch)
+        loss = outputs.loss
+        eval_loss += loss.detach().float()
+        eval_preds.extend(
+            tokenizer.batch_decode(torch.argmax(outputs.logits, -1).detach().cpu().numpy(), skip_special_tokens=True)
+        )
+
+    eval_epoch_loss = eval_loss / len(eval_dataloader)
+    eval_ppl = torch.exp(eval_epoch_loss)
+    train_epoch_loss = total_loss / len(train_dataloader)
+    train_ppl = torch.exp(train_epoch_loss)
+    return train_epoch_loss, eval_epoch_loss, train_ppl, eval_ppl
+
+
+def train_imdb(model, optimizer, train_dataloader, test_dataloader, device, tokenizer):
     
-    positive_index = model.tokenizer.convert_tokens_to_ids("positive")
-    negative_index = model.tokenizer.convert_tokens_to_ids("negative")
+    positive_index = tokenizer.convert_tokens_to_ids("positive")
+    negative_index = tokenizer.convert_tokens_to_ids("negative")
     
     train_loss = 0
     train_acc = 0
