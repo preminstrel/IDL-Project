@@ -5,5 +5,12 @@
 *.log
 *.npy
 *.DS_Store
+*.json
+*.pt
+*.txt
+*.bin
+*.md
+*.safetensors
+result
 main.ipynb
 wandb/
