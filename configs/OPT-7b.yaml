@@ -1,12 +1,12 @@
 mode: train
 
 # data settings
-dataset: wikitext2
+dataset: twitter_complaints
 batch_size: 10
-num_workers: 8
+num_workers: 4
 
 # training settings
-epochs: 100
+epochs: 40
 lr: 0.002
 resume: False
 save_freq: 20
@@ -19,10 +19,9 @@ weight_decay: 0.001
 scheduler: cosine
 
 # model
-arch: facebook/opt-1.3b
-soft_prompt_tokens: 10
+arch: facebook/opt-7b
 
 # wandb settings
-use_wandb: True
+use_wandb: False
 project: project
-name: opt-1.3b
+name: 1st_try

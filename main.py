@@ -15,7 +15,10 @@ from utils.info import epic_start, get_device, terminal_msg, config_to_string
 from utils.model import get_config, count_parameters
 from utils.parser import ParserArgs
 
+import warnings
+
 if __name__ == "__main__":
+    warnings.filterwarnings("ignore", message="OPTForSequenceClassification")
     parser = ParserArgs()
     args = parser.get_args()
 
@@ -26,7 +29,7 @@ if __name__ == "__main__":
 
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
-
+    config['name'] = f"{config['arch']}-{config['dataset']}-{config['soft_prompt_tokens']}"
     if config['use_wandb']:
         wandb.init(
             name=config['name'],
@@ -36,13 +39,22 @@ if __name__ == "__main__":
     
     model, tokenizer = build_model(config)
 
-    peft_config = PromptTuningConfig(
-        task_type=TaskType.CAUSAL_LM,
-        prompt_tuning_init=PromptTuningInit.TEXT,
-        num_virtual_tokens=8,
-        prompt_tuning_init_text="Classify if the tweet is a complaint or not:",
-        tokenizer_name_or_path=config['arch'],
-    )
+    if config['dataset'] == 'twitter_complaints' or config['dataset'] == 'wikitext2':
+        peft_config = PromptTuningConfig(
+            task_type=TaskType.CAUSAL_LM,
+            prompt_tuning_init=PromptTuningInit.TEXT,
+            num_virtual_tokens=config['soft_prompt_tokens'],
+            prompt_tuning_init_text="Classify if the tweet is a complaint or not:",
+            tokenizer_name_or_path=config['arch'],
+        )
+    elif config['dataset'] == 'imdb':
+        peft_config = PromptTuningConfig(
+            task_type=TaskType.SEQ_CLS,
+            prompt_tuning_init=PromptTuningInit.TEXT,
+            num_virtual_tokens=config['soft_prompt_tokens'],
+            prompt_tuning_init_text="Classify if the movie review is positive or negative:",
+            tokenizer_name_or_path=config['arch'],
+        )
 
 
 
@@ -51,7 +63,10 @@ if __name__ == "__main__":
 
     model = model.to(device)
 
-    train_loader, val_loader = get_dataloader(config, tokenizer)
+    if config['dataset'] == 'twitter_complaints':
+        val_loader, train_loader = get_dataloader(config, tokenizer)
+    else:
+        train_loader, val_loader = get_dataloader(config, tokenizer)
     terminal_msg(f"Data Loaded! Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}", 'C')
 
     if config['regularization'] == 'l2':

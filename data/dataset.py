@@ -2,6 +2,7 @@ from datasets import load_dataset
 from transformers import default_data_collator
 import torch
 from torch.utils.data import DataLoader
+import random
 
 
 def get_dataloader(config, tokenizer):
@@ -95,3 +96,59 @@ def get_dataloader(config, tokenizer):
         test_dataloader = DataLoader(test_dataset, batch_size=config['batch_size'], collate_fn=collate_fn)
     
         return train_dataloader, test_dataloader
+    
+    elif config['dataset'] == 'wikitext2':
+        traindata = load_dataset('wikitext', 'wikitext-2-raw-v1', split='train')
+        testdata = load_dataset('wikitext', 'wikitext-2-raw-v1', split='test')
+
+        trainenc = tokenizer(" ".join(traindata['text']), return_tensors='pt')
+        testenc = tokenizer("\n\n".join(testdata['text']), return_tensors='pt')
+
+        def split_sequence(sequence, max_length):
+            sequence = sequence.tolist() if isinstance(sequence, torch.Tensor) else sequence
+            sequences = [sequence[i:i + max_length] for i in range(0, len(sequence), max_length)]
+            # 对最后一个序列进行填充
+            last_seq = sequences[-1]
+            if len(last_seq) < max_length:
+                sequences[-1] = last_seq + [0] * (max_length - len(last_seq))  # 填充0
+            return sequences
+
+        max_length = 512
+        split_input_ids = split_sequence(trainenc['input_ids'][0], max_length)
+        split_attention_mask = split_sequence(trainenc['attention_mask'][0], max_length)
+        labels = trainenc['input_ids'][0][1:].tolist() + [0]
+        split_labels = split_sequence(labels, max_length)
+
+        train_dataset = torch.utils.data.TensorDataset(
+            torch.tensor(split_input_ids), 
+            torch.tensor(split_attention_mask),
+            torch.tensor(split_labels)
+        )
+
+        split_input_ids = split_sequence(testenc['input_ids'][0], max_length)
+        split_attention_mask = split_sequence(testenc['attention_mask'][0], max_length)
+        labels = testenc['input_ids'][0][1:].tolist() + [0]
+        split_labels = split_sequence(labels, max_length)
+
+        test_dataset = torch.utils.data.TensorDataset(
+            torch.tensor(split_input_ids), 
+            torch.tensor(split_attention_mask),
+            torch.tensor(split_labels)
+        )
+
+        
+        def collate_fn(batch):
+            input_ids = torch.stack([item[0] for item in batch])
+            attention_mask = torch.stack([item[1] for item in batch])
+            labels = torch.stack([item[2] for item in batch])
+            return {
+                'input_ids': input_ids,
+                'attention_mask': attention_mask,
+                'labels': labels
+            }
+
+        train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=config['batch_size'], collate_fn=collate_fn)
+        test_dataloader = DataLoader(test_dataset, batch_size=config['batch_size'], collate_fn=collate_fn)
+
+        return train_dataloader, test_dataloader
+

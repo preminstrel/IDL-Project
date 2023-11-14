@@ -3,6 +3,8 @@ from tqdm import tqdm
 import numpy as np
 import random
 
+import wandb
+
 
 def setup_seed(seed):
     torch.manual_seed(seed)
@@ -11,17 +13,21 @@ def setup_seed(seed):
     random.seed(seed)
 
 def train(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer):
-    if config['dataset'] == 'twitter_complaints':
-        train_loss, val_loss, train_ppl, eval_ppl= train_twitter(model, optimizer, train_dataloader, eval_dataloader, device, tokenizer)
+    if config['dataset'] == 'twitter_complaints' or config['dataset'] == 'wikitext2':
+        train_loss, val_loss, train_ppl, eval_ppl= train_twitter(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer)
     elif config['dataset'] == 'imdb':
         train_loss, val_loss, train_ppl, eval_ppl= train_imdb(model, optimizer, train_dataloader, eval_dataloader, device, tokenizer)
+    else:
+        raise ValueError("Invalid dataset name")
 
     return train_loss, val_loss, train_ppl, eval_ppl
 
-def train_twitter(model, optimizer, train_dataloader, eval_dataloader, device, tokenizer):
+
+def train_twitter(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer):
     model.train()
     total_loss = 0
-    for step, batch in enumerate(tqdm(train_dataloader)):
+    bar = tqdm(total=len(train_dataloader), dynamic_ncols=True, leave=False, position=0, desc='Train')
+    for step, batch in enumerate(train_dataloader):
         batch = {k: v.to(device) for k, v in batch.items()}
         outputs = model(**batch)
         loss = outputs.loss
@@ -29,6 +35,13 @@ def train_twitter(model, optimizer, train_dataloader, eval_dataloader, device, t
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
+        bar.set_postfix(
+            loss="{:.04f}".format(float(total_loss / (step + 1))),
+            lr="{:.06f}".format(float(optimizer.param_groups[0]['lr'])),
+            train_ppl="{:.04f}".format(float(torch.exp(total_loss / (step + 1)))),
+            )
+        bar.update()
+    bar.close()
 
     model.eval()
     eval_loss = 0
@@ -47,14 +60,18 @@ def train_twitter(model, optimizer, train_dataloader, eval_dataloader, device, t
     eval_ppl = torch.exp(eval_epoch_loss)
     train_epoch_loss = total_loss / len(train_dataloader)
     train_ppl = torch.exp(train_epoch_loss)
+    if config['use_wandb']:
+        wandb.log({
+            "Train Loss": train_epoch_loss,
+            "Train PPL": train_ppl,
+            "Eval Loss": eval_epoch_loss,
+            "Eval PPL": eval_ppl,
+        })
+
     return train_epoch_loss, eval_epoch_loss, train_ppl, eval_ppl
 
 
 def train_imdb(model, optimizer, train_dataloader, test_dataloader, device, tokenizer):
-    
-    positive_index = tokenizer.convert_tokens_to_ids("positive")
-    negative_index = tokenizer.convert_tokens_to_ids("negative")
-    
     train_loss = 0
     train_acc = 0
     model.train()  # set the model to training mode
@@ -67,13 +84,15 @@ def train_imdb(model, optimizer, train_dataloader, test_dataloader, device, toke
         labels = batch["labels"].to(device)
 
         # Forward pass
-        logits = model(input_ids=input_ids, attention_mask=attention_mask).logits # [batch_size, seq_len, vocab_size]
-        selected_logits = logits[:, -1, [positive_index, negative_index]] # [batch_size, 2]
-        loss_function = torch.nn.CrossEntropyLoss()
-        loss = loss_function(selected_logits, labels)
-        train_loss += loss.item()
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        loss = outputs.loss
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
 
-        train_acc += torch.sum(torch.argmax(selected_logits, dim= 1) == labels).item()/selected_logits.shape[0]
+        predictions = torch.argmax(outputs.logits, dim=-1)
+        train_acc += (predictions == labels).sum().item()/labels.size(0)
+        train_loss += loss.item()
 
         batch_bar.set_postfix(
             loss="{:.04f}".format(float(train_loss / (i + 1))),
@@ -82,34 +101,27 @@ def train_imdb(model, optimizer, train_dataloader, test_dataloader, device, toke
 
         batch_bar.update() # Update tqdm bar
 
-        # acc = (selected_logits.argmax(dim=1) == labels).float().mean()
-
-        # Backward pass
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
     batch_bar.close()
     train_loss /= len(train_dataloader)
     train_acc /= len(train_dataloader)
 
     model.eval()
-    total_loss = 0
-    total_acc = 0
+    test_loss = 0
+    test_acc = 0
     with torch.no_grad():
         for batch in test_dataloader:
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             labels = batch["labels"].to(device)
             
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).logits
-            selected_logits = outputs[:, -1, [positive_index, negative_index]]
-            loss_function = torch.nn.CrossEntropyLoss()
-            loss = loss_function(selected_logits, labels)
-            total_loss += loss.item()
-            total_acc += torch.sum(torch.argmax(selected_logits, dim= 1) == labels).item()/selected_logits.shape[0]
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            predictions = torch.argmax(outputs.logits, dim=-1)
+
+            test_acc += (predictions == labels).sum().item()/labels.size(0)
+            test_loss += outputs.loss.item()
 
 
-    total_loss /= len(test_dataloader)
-    total_acc /= len(test_dataloader)
+    test_loss /= len(test_dataloader)
+    test_acc /= len(test_dataloader)
     
-    return train_loss, total_loss, train_acc, total_acc
+    return train_loss, test_loss, train_acc, test_acc
