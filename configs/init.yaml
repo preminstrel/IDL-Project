@@ -1,4 +1,4 @@
-mode: train
+mode: eval
 
 # data settings
 dataset: imdb

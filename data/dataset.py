@@ -148,7 +148,7 @@ def get_dataloader(config, tokenizer):
             }
 
         train_dataloader = DataLoader(train_dataset, shuffle=True, batch_size=config['batch_size'], collate_fn=collate_fn)
-        test_dataloader = DataLoader(test_dataset, batch_size=config['batch_size'], collate_fn=collate_fn)
+        test_dataloader = DataLoader(test_dataset, batch_size=1, collate_fn=collate_fn)
 
         return train_dataloader, test_dataloader
 

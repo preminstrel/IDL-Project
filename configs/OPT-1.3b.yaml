@@ -2,7 +2,7 @@ mode: train
 
 # data settings
 dataset: wikitext2
-batch_size: 10
+batch_size: 5
 num_workers: 8
 
 # training settings
@@ -20,7 +20,7 @@ scheduler: cosine
 
 # model
 arch: facebook/opt-1.3b
-soft_prompt_tokens: 10
+soft_prompt_tokens: 100
 
 # wandb settings
 use_wandb: True
