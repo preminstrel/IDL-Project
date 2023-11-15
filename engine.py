@@ -78,12 +78,6 @@ def train_wikitext2(config, model, optimizer, train_dataloader, eval_dataloader,
 
     print(f"{eval_epoch_loss=} {eval_ppl=}")
 
-    if config['use_wandb']:
-        wandb.log({
-            "Eval Loss": eval_epoch_loss,
-            "Eval PPL": eval_ppl,
-        })
-
     return train_epoch_loss, eval_epoch_loss, train_ppl, eval_ppl
 
 
@@ -99,7 +93,7 @@ def test_wikitext(config, model, optimizer, train_dataloader, eval_dataloader, d
         logits = outputs.logits
         logits = logits[:, config['soft_prompt_tokens']:]
         loss_fct = torch.nn.CrossEntropyLoss()
-        print(logits.size(), batch["labels"].size())
+        # print(logits.size(), batch["labels"].size())
         loss = loss_fct(logits.view(-1, logits.size(-1)), batch["labels"].view(-1))
 
         #loss = outputs.loss

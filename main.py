@@ -124,6 +124,8 @@ if __name__ == "__main__":
                     "train_loss": train_loss,
                     "val_loss": val_loss,
                     "lr": curr_lr,
+                    "train_performance": train_ppl,
+                    "eval_performance": eval_ppl,
                 })
         
         terminal_msg("Training phase finished!", "C")

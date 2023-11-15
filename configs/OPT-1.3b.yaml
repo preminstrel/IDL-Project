@@ -1,7 +1,7 @@
 mode: train
 
 # data settings
-dataset: wikitext2
+dataset: imdb
 batch_size: 5
 num_workers: 8
 
