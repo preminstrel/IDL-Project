@@ -14,7 +14,7 @@ def setup_seed(seed):
 
 def train(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer):
     if config['dataset'] == 'twitter_complaints' or config['dataset'] == 'wikitext2':
-        train_loss, val_loss, train_ppl, eval_ppl= train_twitter(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer)
+        train_loss, val_loss, train_ppl, eval_ppl= train_wikitext2(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer)
     elif config['dataset'] == 'imdb':
         train_loss, val_loss, train_ppl, eval_ppl= train_imdb(model, optimizer, train_dataloader, eval_dataloader, device, tokenizer)
     else:
@@ -23,14 +23,23 @@ def train(config, model, optimizer, train_dataloader, eval_dataloader, device, t
     return train_loss, val_loss, train_ppl, eval_ppl
 
 
-def train_twitter(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer):
+def train_wikitext2(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer):
     model.train()
     total_loss = 0
     bar = tqdm(total=len(train_dataloader), dynamic_ncols=True, leave=False, position=0, desc='Train')
     for step, batch in enumerate(train_dataloader):
         batch = {k: v.to(device) for k, v in batch.items()}
         outputs = model(**batch)
-        loss = outputs.loss
+        #loss = outputs.loss
+
+        logits = outputs.logits
+        # shift logits [:, config['soft_prompt_tokens']:]
+        logits = logits[:, config['soft_prompt_tokens']:]
+        loss_fct = torch.nn.CrossEntropyLoss()
+        # print(logits.size(), batch["labels"].size()) # torch.Size([10, 512, 50272]) torch.Size([10, 512])
+        #loss = loss_fct(logits.view(-1, logits.size(-1)), batch["labels"].view(-1))
+        loss = loss_fct(logits.reshape(-1, logits.size(-1)), batch["labels"].view(-1))
+        
         total_loss += loss.detach().float()
         loss.backward()
         optimizer.step()
@@ -50,7 +59,12 @@ def train_twitter(config, model, optimizer, train_dataloader, eval_dataloader, d
         batch = {k: v.to(device) for k, v in batch.items()}
         with torch.no_grad():
             outputs = model(**batch)
-        loss = outputs.loss
+
+        logits = outputs.logits
+        logits = logits[:, config['soft_prompt_tokens']:]
+        loss_fct = torch.nn.CrossEntropyLoss()
+        loss = loss_fct(logits.view(-1, logits.size(-1)), batch["labels"].view(-1))
+
         eval_loss += loss.detach().float()
         eval_preds.extend(
             tokenizer.batch_decode(torch.argmax(outputs.logits, -1).detach().cpu().numpy(), skip_special_tokens=True)
@@ -58,18 +72,48 @@ def train_twitter(config, model, optimizer, train_dataloader, eval_dataloader, d
 
     eval_epoch_loss = eval_loss / len(eval_dataloader)
     eval_ppl = torch.exp(eval_epoch_loss)
+
     train_epoch_loss = total_loss / len(train_dataloader)
     train_ppl = torch.exp(train_epoch_loss)
+
+    print(f"{eval_epoch_loss=} {eval_ppl=}")
+
     if config['use_wandb']:
         wandb.log({
-            "Train Loss": train_epoch_loss,
-            "Train PPL": train_ppl,
             "Eval Loss": eval_epoch_loss,
             "Eval PPL": eval_ppl,
         })
 
     return train_epoch_loss, eval_epoch_loss, train_ppl, eval_ppl
 
+
+def test_wikitext(config, model, optimizer, train_dataloader, eval_dataloader, device, tokenizer):
+    model.eval()
+    eval_loss = 0
+    eval_preds = []
+    for step, batch in enumerate(tqdm(eval_dataloader)):
+        batch = {k: v.to(device) for k, v in batch.items()}
+        with torch.no_grad():
+            outputs = model(**batch)
+
+        logits = outputs.logits
+        logits = logits[:, config['soft_prompt_tokens']:]
+        loss_fct = torch.nn.CrossEntropyLoss()
+        print(logits.size(), batch["labels"].size())
+        loss = loss_fct(logits.view(-1, logits.size(-1)), batch["labels"].view(-1))
+
+        #loss = outputs.loss
+        # print(loss)
+        eval_loss += loss.detach().float()
+        eval_preds.extend(
+            tokenizer.batch_decode(torch.argmax(outputs.logits, -1).detach().cpu().numpy(), skip_special_tokens=True)
+        )
+
+    eval_epoch_loss = eval_loss / len(eval_dataloader)
+
+    eval_ppl = torch.exp(eval_epoch_loss)
+
+    print(f"{eval_epoch_loss=} {eval_ppl=}")
 
 def train_imdb(model, optimizer, train_dataloader, test_dataloader, device, tokenizer):
     train_loss = 0

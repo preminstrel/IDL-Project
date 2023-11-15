@@ -9,7 +9,7 @@ from data.dataset import get_dataloader
 
 from models.build import build_model
 
-from engine import setup_seed, train #, eval, test
+from engine import setup_seed, train, test_wikitext
 
 from utils.info import epic_start, get_device, terminal_msg, config_to_string
 from utils.model import get_config, count_parameters
@@ -83,15 +83,13 @@ if __name__ == "__main__":
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config['epochs'], eta_min=0.0001)
     else:
         terminal_msg(f'Invalid scheduler {config["scheduler"]}...', "F")
-    
+
 
     torch.cuda.empty_cache()
     gc.collect()
 
     if config['mode'] == 'eval':
-        val_loss, val_acc = eval(model, val_loader, criterion, device)
-        print(val_acc)
-        exit()
+        test_wikitext(config, model, optimizer, train_loader, val_loader, device, tokenizer)
 
 
     elif config['mode'] == 'train':
