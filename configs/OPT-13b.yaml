@@ -1,0 +1,28 @@
+mode: train
+
+# data settings
+dataset: imdb
+batch_size: 10
+num_workers: 4
+
+# training settings
+epochs: 40
+lr: 0.002
+resume: False
+save_freq: 20
+valid_freq: 1
+seed: 1225
+
+regularization: l2
+weight_decay: 0.001
+
+scheduler: cosine
+
+# model
+arch: facebook/opt-13b
+soft_prompt_tokens: 100
+
+# wandb settings
+use_wandb: False
+project: project
+name: 1st_try

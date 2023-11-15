@@ -1,9 +1,9 @@
 import torch
-from torchsummaryX import summary
 import gc
 import wandb
 import os
 import pandas as pd
+from peft import get_peft_config, get_peft_model, PromptTuningInit, PromptTuningConfig, TaskType, PeftType
 
 from data.dataset import get_dataloader
 
@@ -15,7 +15,10 @@ from utils.info import epic_start, get_device, terminal_msg, config_to_string
 from utils.model import get_config, count_parameters
 from utils.parser import ParserArgs
 
+import warnings
+
 if __name__ == "__main__":
+    warnings.filterwarnings("ignore", message="OPTForSequenceClassification")
     parser = ParserArgs()
     args = parser.get_args()
 
@@ -26,7 +29,7 @@ if __name__ == "__main__":
 
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = True
-
+    config['name'] = f"{config['arch']}-{config['dataset']}-{config['soft_prompt_tokens']}"
     if config['use_wandb']:
         wandb.init(
             name=config['name'],
@@ -34,11 +37,36 @@ if __name__ == "__main__":
             config=config
         )
     
-    model = build_model(config).to(device)
-    # params check
-    num_params, num_trainable_params = count_parameters(model)
-    terminal_msg(f"Model Built! Params in {model.name}: {num_params / 1e6:.4f}M ({num_trainable_params / 1e6:.4f}M trainable). ", 'C')
-    train_loader, val_loader = get_dataloader(config)
+    model, tokenizer = build_model(config)
+
+    if config['dataset'] == 'twitter_complaints' or config['dataset'] == 'wikitext2':
+        peft_config = PromptTuningConfig(
+            task_type=TaskType.CAUSAL_LM,
+            prompt_tuning_init=PromptTuningInit.TEXT,
+            num_virtual_tokens=config['soft_prompt_tokens'],
+            prompt_tuning_init_text="Classify if the tweet is a complaint or not:",
+            tokenizer_name_or_path=config['arch'],
+        )
+    elif config['dataset'] == 'imdb':
+        peft_config = PromptTuningConfig(
+            task_type=TaskType.SEQ_CLS,
+            prompt_tuning_init=PromptTuningInit.TEXT,
+            num_virtual_tokens=config['soft_prompt_tokens'],
+            prompt_tuning_init_text="Classify if the movie review is positive or negative:",
+            tokenizer_name_or_path=config['arch'],
+        )
+
+
+
+    model = get_peft_model(model, peft_config)
+    print(model.print_trainable_parameters())
+
+    model = model.to(device)
+
+    if config['dataset'] == 'twitter_complaints':
+        val_loader, train_loader = get_dataloader(config, tokenizer)
+    else:
+        train_loader, val_loader = get_dataloader(config, tokenizer)
     terminal_msg(f"Data Loaded! Train: {len(train_loader.dataset)}, Val: {len(val_loader.dataset)}", 'C')
 
     if config['regularization'] == 'l2':
@@ -83,8 +111,8 @@ if __name__ == "__main__":
         for epoch in range(start_epoch, config['epochs']):
             print("\nEpoch {}/{}".format(epoch+1, config['epochs']))
             curr_lr = float(optimizer.param_groups[0]['lr'])
-            train_loss, val_loss, train_acc, val_acc = train(model, optimizer, train_loader, val_loader, device)
-            
+            train_loss, val_loss, train_ppl, eval_ppl = train(config, model, optimizer, train_loader, val_loader, device, tokenizer)
+            print(f"{epoch=}: {train_ppl=} {train_loss=} {eval_ppl=} {val_loss=}")
             if config['scheduler'] == 'StepLR':
                 scheduler.step()
             elif config['scheduler'] == 'cosine':
@@ -99,9 +127,6 @@ if __name__ == "__main__":
                     "val_loss": val_loss,
                     "lr": curr_lr,
                 })
-
-            print("Train Loss {:.04f}\t Learning Rate {:.07f}".format(train_loss, curr_lr))
-            print("\tVal Loss {:.04f}".format(val_loss))
         
         terminal_msg("Training phase finished!", "C")
     
