@@ -107,7 +107,7 @@ def get_dataloader(config, tokenizer):
         def split_sequence(sequence, max_length):
             sequence = sequence.tolist() if isinstance(sequence, torch.Tensor) else sequence
             sequences = [sequence[i:i + max_length] for i in range(0, len(sequence), max_length)]
-            # 对最后一个序列进行填充
+
             last_seq = sequences[-1]
             if len(last_seq) < max_length:
                 sequences[-1] = last_seq + [0] * (max_length - len(last_seq))  # 填充0

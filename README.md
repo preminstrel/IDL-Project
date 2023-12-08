@@ -1,6 +1,10 @@
-# IDL Project
+# IDL Project: Optimizing Large Language Models on Downstream Tasks with Better Soft Prompts
 
 <img alt="python" src="https://img.shields.io/badge/-Python-74787a?style=flat-square&logo=python&logoColor=white" />
+
+![](figs/soft.png)
+
+![](figs/arch.png)
 
 ## Get Started
 
@@ -43,5 +47,5 @@ As shown,
 
 ## Experiment
 
-You can run the scripts using `python main.py --model {model}`:
+You can run the scripts using `python main.py --config {config.yaml}`:
 
