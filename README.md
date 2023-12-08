@@ -1,6 +1,6 @@
 # IDL Project: Optimizing Large Language Models on Downstream Tasks with Better Soft Prompts
 
-<img alt="python" src="https://img.shields.io/badge/-Python-74787a?style=flat-square&logo=python&logoColor=white" />
+<img alt="python" src="https://img.shields.io/badge/-Python-74787a?style=flat-square&logo=python&logoColor=white" /> <img alt="CMU" src="https://img.shields.io/badge/CMU-11785-red?style=flat-square" /> <img alt="opt" src="https://img.shields.io/badge/Meta-OPT-blue?style=flat-square&logo=Meta"> <img alt="gpt" src="https://img.shields.io/badge/OpenAI-GPT-green?style=flat-square&logo=OpenAI">
 
 ![](figs/soft.png)
 
